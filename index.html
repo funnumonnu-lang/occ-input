@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1f5f8b">
+<title>稼働率調査 入力</title>
+<style>
+/* Layout: 上部に日時・フロアの切替 ／ 中央に図面（ピンチで拡大） ／ 下からせり上がる入力シート */
+:root{
+  --bg:#eef1f0; --surface:#ffffff; --surface-2:#f4f6f5; --line:#d5dcd9; --fg:#1d2624; --muted:#5f6c68;
+  --accent:#1f5f8b; --accent-ink:#ffffff; --canvas:#dfe4e2; --ring:#f2b705; --danger:#b42318;
+  --s-use:#2f6fd1; --s-away:#e0a100; --s-empty:#9aa3a1; --s-na:#3b3f3e;
+  --font-ui:-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",system-ui,sans-serif;
+  --font-num:ui-monospace,"SF Mono","Menlo","Consolas",monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141a19; --surface:#1c2422; --surface-2:#232d2b; --line:#33403d; --fg:#e4ebe9; --muted:#9aa8a4;
+  --accent:#5aa3d6; --accent-ink:#0d1a24; --canvas:#0e1312; --ring:#f5c33b; --danger:#f97066; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141a19; --surface:#1c2422; --surface-2:#232d2b; --line:#33403d; --fg:#e4ebe9; --muted:#9aa8a4;
+  --accent:#5aa3d6; --accent-ink:#0d1a24; --canvas:#0e1312; --ring:#f5c33b; --danger:#f97066; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:15px;-webkit-text-size-adjust:100%;overscroll-behavior:none}
+button,select,input{font:inherit;color:var(--fg)}
+button{cursor:pointer;-webkit-tap-highlight-color:transparent}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.app{display:flex;flex-direction:column;height:100%;padding-top:env(safe-area-inset-top,0px)}
+
+/* 上部 */
+.top{background:var(--surface);border-bottom:1px solid var(--line);padding:8px 12px;display:flex;flex-direction:column;gap:8px;flex:none}
+.title{display:flex;align-items:center;gap:8px;min-width:0}
+.title b{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.sync{font-size:12px;padding:3px 9px;border-radius:999px;background:var(--surface-2);color:var(--muted);white-space:nowrap;border:1px solid var(--line)}
+.sync.wait{color:#8a5a00;background:#fff3cf;border-color:#f2d27a}
+.sync.err{color:var(--danger)}
+.who{font-size:12px;color:var(--muted);border:0;background:none;padding:0 2px;text-decoration:underline}
+.sel{display:grid;grid-template-columns:1.4fr .8fr 1.1fr;gap:6px}
+select{width:100%;min-width:0;font-size:16px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.prog{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
+.bar{flex:1;height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden;border:1px solid var(--line)}
+.bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .2s}
+.prog b{font-family:var(--font-num);color:var(--fg);font-variant-numeric:tabular-nums}
+.leg{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11px;color:var(--muted)}
+.leg span{display:inline-flex;align-items:center;gap:4px}
+.leg i{width:10px;height:10px;border-radius:50%;background:var(--c);border:1.5px solid var(--c)}
+.leg i.o{background:#fff;border-color:var(--muted)}
+
+/* 図面 */
+.vp{flex:1;position:relative;overflow:hidden;background:var(--canvas);touch-action:none;min-height:0}
+.stage{position:absolute;left:0;top:0;transform-origin:0 0}
+.stage img{display:block;max-width:none;pointer-events:none;user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
+.mk{position:absolute;width:0;height:0}
+.mk b{position:absolute;left:0;top:0;transform:translate(-50%,-50%) scale(var(--inv,1));display:grid;place-items:center;min-width:26px;height:26px;padding:0 4px;border-radius:13px;
+  font:700 11px/1 var(--font-num);background:#fff;color:#1d2624;border:2.5px solid var(--t);box-shadow:0 1px 3px rgba(0,0,0,.4);white-space:nowrap}
+.mk[data-s] b{background:var(--c);border-color:#fff;color:#fff}
+.mk[data-s="2.離席"] b{color:#2b2100}
+.mk.on b{box-shadow:0 0 0 4px var(--ring),0 1px 3px rgba(0,0,0,.4);z-index:3}
+.mk.other b::after{content:"";position:absolute;right:-3px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--ring);border:1.5px solid #fff}
+.fab{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:6px}
+.fab button{width:40px;height:40px;border-radius:20px;border:1px solid var(--line);background:var(--surface);box-shadow:0 1px 4px rgba(0,0,0,.15);font-size:18px}
+.start{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);padding:12px 20px;border-radius:999px;border:0;background:var(--accent);color:var(--accent-ink);font-weight:700;box-shadow:0 2px 10px rgba(0,0,0,.25);white-space:nowrap}
+
+/* 入力シート */
+.sheet{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);border-radius:16px 16px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.18);
+  padding:12px 14px calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px;z-index:10;max-height:70vh;overflow-y:auto}
+.sh-head{display:flex;align-items:center;gap:10px}
+.no{display:grid;place-items:center;min-width:46px;height:46px;padding:0 8px;border-radius:23px;background:var(--surface-2);border:3px solid var(--t);font:700 18px var(--font-num)}
+.meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.meta b{font-size:15px}
+.meta span{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav{display:flex;gap:6px}
+.nav button{width:44px;height:44px;border-radius:22px;border:1px solid var(--line);background:var(--surface-2);font-size:18px}
+.st{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.st button{min-height:56px;border-radius:12px;border:2px solid var(--line);background:var(--surface-2);font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px}
+.st button i{width:14px;height:14px;border-radius:50%;background:var(--c)}
+.st button[aria-pressed="true"]{background:var(--c);border-color:var(--c);color:#fff}
+.st button[aria-pressed="true"] i{background:#fff}
+.st button[data-v="2.離席"][aria-pressed="true"]{color:#2b2100}
+.cnt{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:12px}
+.cnt>span{flex:1;font-size:14px}
+.cnt button{width:48px;height:48px;border-radius:24px;border:1px solid var(--line);background:var(--surface-2);font-size:22px}
+.cnt output{min-width:40px;text-align:center;font:700 22px var(--font-num)}
+.go{min-height:50px;border-radius:12px;border:0;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:16px}
+.note{width:100%;font-size:16px;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.foot{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted)}
+.linkbtn{border:0;background:none;color:var(--danger);font-size:13px;padding:6px 0}
+
+/* 初期画面 */
+.page{flex:1;overflow-y:auto;padding:24px 16px calc(24px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px;max-width:520px;width:100%;margin:0 auto}
+.page h1{font-size:20px;margin:0}
+.page p{margin:0;color:var(--muted);line-height:1.6}
+.page label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
+.page input{font-size:16px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--fg)}
+.page .go{width:100%}
+.err{color:var(--danger);font-size:13px}
+.demo{min-height:46px;border-radius:12px;border:1px dashed var(--line);background:transparent;color:var(--muted)}
+.copy{font-size:11px;color:var(--muted);text-align:center;margin-top:auto}
+.toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 12px);transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 14px;border-radius:10px;font-size:13px;z-index:30;max-width:90vw}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- 接続・名前の入力 -->
+  <div class="page" id="pSetup" hidden>
+    <h1>稼働率調査 入力</h1>
+    <p id="setupMsg">調査担当者から受け取ったQRコードから開いてください。うまく開けない場合は、下に接続先と調査IDを入力します。</p>
+    <div id="manual">
+      <label>接続先URL<input id="inApi" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></label>
+      <label style="margin-top:10px">調査ID<input id="inId" type="text" placeholder="16桁の英数字" autocomplete="off" autocapitalize="off"></label>
+    </div>
+    <label>あなたの名前（入力者として記録されます）<input id="inName" type="text" placeholder="例：山田" autocomplete="name"></label>
+    <div class="err" id="setupErr" hidden></div>
+    <button class="go" id="bStart">調査をはじめる</button>
+    <button class="demo" id="bDemo">デモで操作を試す（送信されません）</button>
+    <div class="copy">© 合同会社mokume　無断複製・再配布禁止</div>
+  </div>
+
+  <!-- 入力画面 -->
+  <div class="top" id="pTop" hidden>
+    <div class="title"><b id="tName">調査</b><button class="who" id="bWho"></button><span class="sync" id="sync">送信済み</span></div>
+    <div class="sel">
+      <select id="sDate" aria-label="調査日"></select>
+      <select id="sTime" aria-label="調査時間"></select>
+      <select id="sFloor" aria-label="フロア"></select>
+    </div>
+    <div class="prog"><span>入力済み</span><div class="bar"><i id="pBar"></i></div><b id="pTxt">0/0</b></div>
+    <div class="leg">
+      <span><i class="o"></i>未入力</span><span><i style="--c:var(--s-use)"></i>1.使用</span><span><i style="--c:var(--s-away)"></i>2.離席</span>
+      <span><i style="--c:var(--s-empty)"></i>3.空席</span><span><i style="--c:var(--s-na)"></i>4.観察不可</span>
+    </div>
+  </div>
+  <div class="vp" id="vp" hidden>
+    <div class="stage" id="stage"><img id="img" alt="図面"><div id="marks"></div></div>
+    <div class="fab"><button id="zIn" aria-label="拡大">＋</button><button id="zOut" aria-label="縮小">－</button><button id="zFit" aria-label="全体表示">⤢</button></div>
+    <button class="start" id="bNext">未入力の席から入力する</button>
+  </div>
+
+  <!-- 入力シート -->
+  <div class="sheet" id="sheet" hidden>
+    <div class="sh-head">
+      <div class="no" id="shNo">1</div>
+      <div class="meta"><b id="shType"></b><span id="shSub"></span></div>
+      <div class="nav"><button id="bPrev" aria-label="前の番号">‹</button><button id="bFwd" aria-label="次の番号">›</button><button id="bClose" aria-label="閉じる">×</button></div>
+    </div>
+    <div class="st" id="st"></div>
+    <div class="cnt" id="cnt" hidden><span>使用している人数</span><button id="cMinus" aria-label="減らす">－</button><output id="cVal">1</output><button id="cPlus" aria-label="増やす">＋</button></div>
+    <button class="go" id="bOk" hidden>決定して次へ</button>
+    <input class="note" id="note" type="text" placeholder="備考（任意）" enterkeyhint="done">
+    <div class="foot"><span id="shWho"></span><button class="linkbtn" id="bClear" hidden>この入力を取り消す</button></div>
+  </div>
+</div>
+
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const STATUS=[{v:'1.使用',c:'var(--s-use)'},{v:'2.離席',c:'var(--s-away)'},{v:'3.空席',c:'var(--s-empty)'},{v:'4.観察不可',c:'var(--s-na)'}];
+const TYPEC={'一般席':'#3b6fb6','集中席':'#6a4fb0','オープンmtg':'#23897a','Webブース':'#c2410c','社内会議室':'#b4335a','来客会議室':'#86691a','カフェ/ラウンジ':'#4d8a35','その他':'#6b7280'};
+const MULTI=['オープンmtg','社内会議室','来客会議室','カフェ/ラウンジ'];
+const tcol=t=>{const x=pkg&&pkg.types&&pkg.types.find(y=>y.k===t);return x?x.c:(TYPEC[t]||'#6b7280')};
+const isMulti=p=>(+p.cap||0)>1||(pkg&&pkg.types?pkg.types.some(y=>y.k===p.type&&y.multi):MULTI.includes(p.type));
+const stColor=s=>(STATUS.find(x=>x.v===s)||{}).c;
+const WD='日月火水木金土';
+const fmtD=s=>{const[y,m,d]=s.split('-').map(Number);return`${m}/${d}(${WD[new Date(Date.UTC(y,m-1,d)).getUTCDay()]})`};
+const hm=t=>`${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`;
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const LS={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+function toast(m){const d=document.createElement('div');d.className='toast';d.textContent=m;document.body.appendChild(d);setTimeout(()=>d.remove(),2400)}
+
+/* ---------- 配布データの保存（IndexedDB） ---------- */
+const idb=(()=>{let dbp;const open=()=>dbp||(dbp=new Promise((ok,ng)=>{const r=indexedDB.open('occ-input',1);r.onupgradeneeded=()=>r.result.createObjectStore('pkg');r.onsuccess=()=>ok(r.result);r.onerror=()=>ng(r.error)}));
+  const tx=(m,f)=>open().then(db=>new Promise((ok,ng)=>{const t=db.transaction('pkg',m),q=f(t.objectStore('pkg'));q.onsuccess=()=>ok(q.result);q.onerror=()=>ng(q.error)}));
+  return{get:k=>tx('readonly',s=>s.get(k)).catch(()=>null),put:(k,v)=>tx('readwrite',s=>s.put(v,k)).catch(()=>null)}})();
+
+/* ---------- 通信 ---------- */
+let cfg=LS.get('occ-m-cfg',{});
+async function api(params,body){
+  if(cfg.demo){if(body)return{ok:true};if(params.action==='records')return{ok:true,records:demoOthers()};}
+  const url=cfg.api+(body?'':'?'+new URLSearchParams(params));
+  const res=await fetch(url,body?{method:'POST',body:JSON.stringify(body)}:{});
+  const j=await res.json();if(!j.ok)throw new Error(j.error||'通信に失敗しました');return j;
+}
+
+/* ---------- 状態 ---------- */
+let pkg=null,recs={},queue=[],cur={date:'',time:0,floor:''},selId=null,view={z:1,tx:0,ty:0},pendingStatus=null;
+const keyOf=(d,t,pid)=>`${d}|${t}|${pid}`;
+const F=()=>pkg&&pkg.floors.find(f=>f.id===cur.floor);
+const pts=()=>{const f=F();return f?[...f.points].sort((a,b)=>(+a.no||0)-(+b.no||0)):[]};
+const recOf=pid=>recs[keyOf(cur.date,cur.time,pid)];
+const saveLocal=()=>{LS.set('occ-m-rec-'+cfg.id,recs);LS.set('occ-m-q-'+cfg.id,queue)};
+
+
+/* ---------- デモ用データ（サーバーなしで操作を試す） ---------- */
+let demoPkg=null;
+function makeDemoPkg(){
+  if(demoPkg)return demoPkg;
+  const W=1200,H=760,c=document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d');
+  g.fillStyle='#fbfbf9';g.fillRect(0,0,W,H);g.strokeStyle='#2b2b2b';g.lineWidth=6;g.strokeRect(30,30,W-60,H-60);g.lineWidth=3;
+  const room=(x,y,w,h,t)=>{g.strokeRect(x,y,w,h);g.fillStyle='#8a8a8a';g.font='16px sans-serif';g.fillText(t,x+10,y+24)};
+  room(30,30,300,220,'会議室A');room(330,30,220,220,'会議室B');room(550,30,180,220,'応接');room(900,30,270,300,'ラウンジ');
+  for(let i=0;i<3;i++)g.strokeRect(760,40+i*90,110,80);g.fillStyle='#8a8a8a';g.fillText('ブース',770,328);
+  g.lineWidth=1.5;g.strokeStyle='#666';
+  for(let r=0;r<3;r++)for(let k=0;k<2;k++){const x=90+k*360,y=330+r*130;g.strokeRect(x,y,280,70);g.beginPath();g.moveTo(x,y+35);g.lineTo(x+280,y+35);for(let j=1;j<4;j++){g.moveTo(x+j*70,y);g.lineTo(x+j*70,y+70)}g.stroke()}
+  g.strokeStyle='#2b2b2b';g.lineWidth=3;room(860,400,310,330,'集中エリア');g.lineWidth=1.5;for(let i=0;i<4;i++)g.strokeRect(890,450+i*65,120,45);
+  const pts=[];let n=0;const add=(x,y,type,name,cap,dept)=>pts.push({id:'d'+(++n),no:n,type,name:name||'',dept:dept||'',cap:cap??'',memo:'',x:x/W,y:y/H});
+  for(let r=0;r<3;r++)for(let k=0;k<2;k++){const x=90+k*360,y=330+r*130,dp=k?'企画部':'営業部';for(let j=0;j<4;j++){add(x+35+j*70,y+17,'一般席','','',dp);add(x+35+j*70,y+53,'一般席','','',dp)}}
+  for(let i=0;i<4;i++)add(950,472+i*65,'集中席');for(let i=0;i<3;i++)add(815,80+i*90,'Webブース');
+  add(180,150,'社内会議室','会議室A',8);add(440,150,'社内会議室','会議室B',6);add(640,150,'来客会議室','応接',4);add(980,140,'カフェ/ラウンジ','ラウンジ',12);add(1090,240,'オープンmtg','',4);
+  const ds=[],d=new Date();while(ds.length<3){const w=d.getDay();if(w&&w<6)ds.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);d.setDate(d.getDate()+1)}
+  return demoPkg={id:'demo',name:'デモ：本社3F 稼働率調査',dates:ds,times:[540,600,660,720,780,840,900,960,1020,1080],
+    floors:[{id:'f1',name:'3F',img:c.toDataURL('image/jpeg',.85),w:W,h:H,points:pts}]};
+}
+/* 別の調査員（佐藤さん）が右側の島を入力済み、という想定 */
+let demoSeed=null;
+function demoOthers(){const out=[],st=['1.使用','1.使用','2.離席','3.空席'];
+  const slot=cur.date+'|'+cur.time;if(demoSeed===null)demoSeed=slot;if(slot!==demoSeed)return out;
+  for(let i=0;i<8;i++){const pid='d'+(9+i);out.push({key:keyOf(cur.date,cur.time,pid),date:cur.date,time:cur.time,pointId:pid,status:st[i%4],count:'',note:'',surveyor:'佐藤',ts:Date.now()-5*60000})}
+  return out}
+
+/* ---------- 起動 ---------- */
+async function boot(){
+  /* QRのURL：入力ページ#api=<GASのURL>&s=<調査ID>（「#」以降はGitHub Pagesのサーバーに送られない）
+     以前の形式（?api=…&s=…）も読めるようにしておく */
+  const q=new URLSearchParams(location.hash.slice(1)),q2=new URLSearchParams(location.search);
+  const api=q.get('api')||q2.get('api'),sid=q.get('s')||q2.get('s');
+  if(api&&sid){if(cfg.id!==sid||cfg.demo){const nm=cfg.name;cfg={name:nm}}cfg.api=api;cfg.id=sid;LS.set('occ-m-cfg',cfg)}
+  if(location.hash||location.search)history.replaceState(null,'',location.pathname);
+  if(!cfg.api||!cfg.id||!cfg.name){showSetup();return}
+  await openSurvey();
+}
+function showSetup(msg){
+  $('pSetup').hidden=false;$('pTop').hidden=$('vp').hidden=$('sheet').hidden=true;
+  $('inApi').value=cfg.api||'';$('inId').value=cfg.id||'';$('inName').value=cfg.name||'';
+  $('manual').hidden=!!(cfg.api&&cfg.id)&&!msg;
+  $('setupErr').hidden=!msg;$('setupErr').textContent=msg||'';
+}
+$('bStart').onclick=async()=>{
+  const a=$('inApi').value.trim(),i=$('inId').value.trim(),n=$('inName').value.trim();
+  if(!a||!i){$('manual').hidden=false;showSetup('接続先URLと調査IDを入力してください');return}
+  if(!n){$('setupErr').hidden=false;$('setupErr').textContent='名前を入力してください';return}
+  if(cfg.id!==i){pkg=null}
+  cfg={api:a,id:i,name:n};LS.set('occ-m-cfg',cfg);
+  $('bStart').disabled=true;$('bStart').textContent='読み込み中…';
+  await openSurvey();$('bStart').disabled=false;$('bStart').textContent='調査をはじめる';
+};
+$('bDemo').onclick=async()=>{
+  cfg={demo:true,id:'demo',api:'',name:$('inName').value.trim()||'デモ'};
+  try{localStorage.removeItem('occ-m-rec-demo');localStorage.removeItem('occ-m-q-demo');localStorage.removeItem('occ-m-cur-demo')}catch(e){}
+  await openSurvey();toast('デモです。入力内容はどこにも送信されません');
+};
+$('bWho').onclick=()=>{showSetup();$('manual').hidden=false};
+
+async function openSurvey(){
+  pkg=cfg.demo?makeDemoPkg():await idb.get(cfg.id);
+  if(!pkg){
+    try{const j=await api({action:'package',id:cfg.id});pkg=j.package;await idb.put(cfg.id,pkg)}
+    catch(e){showSetup('調査を読み込めませんでした（'+e.message+'）。通信環境と、接続先URL・調査IDを確認してください');return}
+  }
+  recs=LS.get('occ-m-rec-'+cfg.id,{});queue=LS.get('occ-m-q-'+cfg.id,[]);
+  $('pSetup').hidden=true;$('pTop').hidden=$('vp').hidden=false;
+  $('tName').textContent=pkg.name||'稼働率調査';$('bWho').textContent=cfg.name+'さん';
+  // 日付・時刻の初期値：今日と、今の時刻の直前の回
+  const now=new Date(),td=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`,nm=now.getHours()*60+now.getMinutes();
+  const last=LS.get('occ-m-cur-'+cfg.id,null);
+  cur.date=pkg.dates.includes(td)?td:(last&&pkg.dates.includes(last.date)?last.date:pkg.dates[0]);
+  cur.time=cur.date===td?([...pkg.times].reverse().find(t=>t<=nm)??pkg.times[0]):(last&&pkg.times.includes(last.time)?last.time:pkg.times[0]);
+  cur.floor=(last&&pkg.floors.some(f=>f.id===last.floor))?last.floor:pkg.floors[0].id;
+  $('sDate').innerHTML=pkg.dates.map(d=>`<option value="${d}">${fmtD(d)}${d===td?' 今日':''}</option>`).join('');
+  $('sTime').innerHTML=pkg.times.map(t=>`<option value="${t}">${hm(t)}</option>`).join('');
+  $('sFloor').innerHTML=pkg.floors.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join('');
+  $('sTime').hidden=false;
+  setFloor(true);pull();flush();
+}
+function syncSel(){$('sDate').value=cur.date;$('sTime').value=String(cur.time);$('sFloor').value=cur.floor;LS.set('occ-m-cur-'+cfg.id,cur)}
+$('sDate').onchange=e=>{cur.date=e.target.value;closeSheet();render();pull();syncSel()};
+$('sTime').onchange=e=>{cur.time=+e.target.value;closeSheet();render();pull();syncSel()};
+$('sFloor').onchange=e=>{cur.floor=e.target.value;closeSheet();setFloor(true)};
+
+/* ---------- 図面 ---------- */
+const vp=$('vp'),stage=$('stage'),img=$('img'),marks=$('marks');
+let workZ=1;
+/* 隣の席との距離（中央値）から、番号が重ならない倍率を求める */
+function calcWorkZ(f){const P=f.points.map(p=>[p.x*f.w,p.y*f.h]),ds=[];
+  for(let i=0;i<P.length;i++){let m=Infinity;for(let j=0;j<P.length;j++)if(i!==j){const d=Math.hypot(P[i][0]-P[j][0],P[i][1]-P[j][1]);if(d>1&&d<m)m=d}if(m<Infinity)ds.push(m)}
+  ds.sort((a,b)=>a-b);const med=ds.length?ds[Math.floor(ds.length/2)]:Math.max(f.w,f.h)/10;return Math.min(8,34/med)}
+function setFloor(refit){const f=F();if(!f)return;workZ=calcWorkZ(f);img.src=f.img;img.width=f.w;img.height=f.h;syncSel();render();if(refit)requestAnimationFrame(fit)}
+function apply(){stage.style.transform=`translate(${view.tx}px,${view.ty}px) scale(${view.z})`;stage.style.setProperty('--inv',Math.min(1,Math.max(.5,view.z/workZ))/view.z)}
+function fit(){const f=F();if(!f)return;const r=vp.getBoundingClientRect();const z=Math.min(r.width/f.w,r.height/f.h)*.96;view={z,tx:(r.width-f.w*z)/2,ty:(r.height-f.h*z)/2};apply()}
+function zoomAt(k,cx,cy){const z2=Math.min(10,Math.max(.05,view.z*k));const s=z2/view.z;view.tx=cx-(cx-view.tx)*s;view.ty=cy-(cy-view.ty)*s;view.z=z2;apply()}
+$('zIn').onclick=()=>{const r=vp.getBoundingClientRect();zoomAt(1.4,r.width/2,r.height/2)};
+$('zOut').onclick=()=>{const r=vp.getBoundingClientRect();zoomAt(1/1.4,r.width/2,r.height/2)};
+$('zFit').onclick=fit;
+function ensureVisible(p){
+  const f=F(),r=vp.getBoundingClientRect(),sh=$('sheet').hidden?0:$('sheet').getBoundingClientRect().height;
+  const visH=Math.max(120,r.height-Math.max(0,sh-(window.innerHeight-r.bottom)));
+  if(view.z<workZ*.9){view.z=workZ;view.tx=r.width/2-p.x*f.w*view.z;view.ty=visH/2-p.y*f.h*view.z;stage.style.transition='transform .2s';apply();setTimeout(()=>stage.style.transition='',220);return}
+  const x=view.tx+p.x*f.w*view.z,y=view.ty+p.y*f.h*view.z;
+  if(x<40||x>r.width-40||y<40||y>visH-40){view.tx+=r.width/2-x;view.ty+=visH/2-y;stage.style.transition='transform .2s';apply();setTimeout(()=>stage.style.transition='',220)}
+}
+function render(){
+  const f=F();if(!f)return;let done=0;const list=pts();
+  marks.innerHTML=list.map(p=>{const r=recOf(p.id),s=r&&r.status;if(s)done++;
+    const other=r&&s&&r.surveyor&&r.surveyor!==cfg.name;
+    return`<div class="mk${p.id===selId?' on':''}${other?' other':''}" data-id="${p.id}" ${s?`data-s="${esc(s)}"`:''} style="left:${p.x*f.w}px;top:${p.y*f.h}px;--t:${tcol(p.type)};--c:${stColor(s)||'transparent'}"><b>${esc(p.no)}</b></div>`}).join('');
+  $('pTxt').textContent=`${done}/${list.length}`;$('pBar').style.width=list.length?(done/list.length*100)+'%':'0';
+  $('bNext').hidden=!$('sheet').hidden;$('bNext').textContent=done===list.length&&list.length?'このフロアは入力済み':'未入力の席から入力する';
+}
+
+/* タッチ操作：1本指でパン／タップで選択、2本指でピンチ */
+const ptrs=new Map();let gest=null;
+vp.addEventListener('pointerdown',e=>{if(e.target.closest('.fab,.start'))return;vp.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===1)gest={type:'tap',sx:e.clientX,sy:e.clientY,tx:view.tx,ty:view.ty};
+  else if(ptrs.size===2){const[a,b]=[...ptrs.values()];gest={type:'pinch',d:Math.hypot(a.x-b.x,a.y-b.y),z:view.z,tx:view.tx,ty:view.ty,mx:(a.x+b.x)/2,my:(a.y+b.y)/2}}});
+vp.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId)||!gest)return;ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});const r=vp.getBoundingClientRect();
+  if(gest.type==='pinch'&&ptrs.size>=2){const[a,b]=[...ptrs.values()];const d=Math.hypot(a.x-b.x,a.y-b.y),z2=Math.min(10,Math.max(.05,gest.z*d/gest.d)),k=z2/gest.z;
+    const mx=(a.x+b.x)/2-r.left,my=(a.y+b.y)/2-r.top,ox=gest.mx-r.left,oy=gest.my-r.top;
+    view.z=z2;view.tx=mx-(ox-gest.tx)*k;view.ty=my-(oy-gest.ty)*k;apply();return}
+  const dx=e.clientX-gest.sx,dy=e.clientY-gest.sy;
+  if(gest.type==='tap'&&Math.hypot(dx,dy)>8)gest.type='pan';
+  if(gest.type==='pan'){view.tx=gest.tx+dx;view.ty=gest.ty+dy;apply()}});
+const endPtr=e=>{if(!ptrs.has(e.pointerId))return;ptrs.delete(e.pointerId);
+  if(gest&&gest.type==='tap'&&ptrs.size===0&&e.type==='pointerup')tapAt(e.clientX,e.clientY);
+  if(ptrs.size===0)gest=null;else if(gest&&gest.type==='pinch'){const[a]=[...ptrs.values()];gest={type:'pan',sx:a.x,sy:a.y,tx:view.tx,ty:view.ty}}};
+vp.addEventListener('pointerup',endPtr);vp.addEventListener('pointercancel',endPtr);
+vp.addEventListener('wheel',e=>{e.preventDefault();const r=vp.getBoundingClientRect();zoomAt(e.deltaY<0?1.15:1/1.15,e.clientX-r.left,e.clientY-r.top)},{passive:false});
+function tapAt(cx,cy){
+  const f=F(),r=vp.getBoundingClientRect();let best=null,bd=26;
+  for(const p of f.points){const x=r.left+view.tx+p.x*f.w*view.z,y=r.top+view.ty+p.y*f.h*view.z,d=Math.hypot(x-cx,y-cy);if(d<bd){bd=d;best=p}}
+  if(best)select(best.id);
+}
+
+/* ---------- 入力シート ---------- */
+$('st').innerHTML=STATUS.map(s=>`<button data-v="${s.v}" style="--c:${s.c}" aria-pressed="false"><i></i>${s.v}</button>`).join('');
+function select(id){
+  selId=id;pendingStatus=null;const p=pts().find(x=>x.id===id);if(!p)return;const r=recOf(id);
+  $('sheet').hidden=false;$('bNext').hidden=true;
+  $('shNo').textContent=p.no;$('shNo').style.setProperty('--t',tcol(p.type));
+  $('shType').textContent=p.type+(p.name?'・'+p.name:'');
+  $('shSub').textContent=[p.dept,p.cap?`定員${p.cap}`:'',p.memo].filter(Boolean).join('　')||' ';
+  $('note').value=r&&r.note||'';
+  $('shWho').textContent=r&&r.status?`${r.surveyor||'不明'}さんが ${new Date(r.ts).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})} に入力`:'未入力';
+  $('bClear').hidden=!(r&&r.status);
+  $('cVal').value=$('cVal').textContent=r&&r.count!==''&&r.count!=null?r.count:(+p.cap>1?1:1);
+  paintSheet(r&&r.status);render();ensureVisible(p);
+}
+function paintSheet(s){
+  const p=pts().find(x=>x.id===selId);
+  $('st').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===(pendingStatus||s)));
+  const showCnt=p&&isMulti(p)&&(pendingStatus||s)==='1.使用';
+  $('cnt').hidden=!showCnt;$('bOk').hidden=!showCnt;
+}
+function closeSheet(){selId=null;$('sheet').hidden=true;render()}
+$('bClose').onclick=closeSheet;
+$('st').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||!selId)return;const p=pts().find(x=>x.id===selId),v=b.dataset.v;
+  if(isMulti(p)&&v==='1.使用'){pendingStatus=v;paintSheet();return}
+  commit(p,v,'');advance()});
+$('cMinus').onclick=()=>{const v=Math.max(0,(+$('cVal').textContent||0)-1);$('cVal').textContent=v};
+$('cPlus').onclick=()=>{const v=(+$('cVal').textContent||0)+1;$('cVal').textContent=v};
+$('bOk').onclick=()=>{const p=pts().find(x=>x.id===selId);commit(p,'1.使用',+$('cVal').textContent||0);advance()};
+$('note').addEventListener('change',()=>{const p=pts().find(x=>x.id===selId),r=p&&recOf(p.id);if(r&&r.status)commit(p,r.status,r.count,true)});
+$('note').addEventListener('keydown',e=>{if(e.key==='Enter')e.target.blur()});
+$('bClear').onclick=()=>{const p=pts().find(x=>x.id===selId);if(!p)return;commit(p,'','',true);select(p.id);toast('入力を取り消しました')};
+$('bPrev').onclick=()=>step(-1);$('bFwd').onclick=()=>step(1);
+$('bNext').onclick=()=>{const l=pts(),n=l.find(p=>!(recOf(p.id)||{}).status);if(n)select(n.id);else if(l.length){select(l[0].id);toast('このフロアは全席入力済みです')}};
+function step(d){const l=pts(),i=l.findIndex(p=>p.id===selId);if(i<0)return;select(l[(i+d+l.length)%l.length].id)}
+function advance(){
+  const l=pts(),i=l.findIndex(p=>p.id===selId);
+  for(let k=1;k<=l.length;k++){const p=l[(i+k)%l.length];if(!(recOf(p.id)||{}).status){select(p.id);return}}
+  closeSheet();toast('このフロアの '+hm(cur.time)+' の回はすべて入力しました');
+}
+function commit(p,status,count,stay){
+  const f=F(),r={key:keyOf(cur.date,cur.time,p.id),date:cur.date,time:cur.time,floorId:f.id,floor:f.name,pointId:p.id,no:p.no,type:p.type,
+    status,count:status==='1.使用'&&isMulti(p)?count:'',note:$('note').value.trim(),surveyor:cfg.name,ts:Date.now()};
+  recs[r.key]=r;queue=queue.filter(q=>q.key!==r.key);queue.push(r);saveLocal();render();flush();
+  if(stay)select(p.id);
+}
+
+/* ---------- 送信と受信 ---------- */
+let flushing=false,lastErr='';
+function syncLabel(){const s=$('sync');
+  if(cfg.demo){s.className='sync wait';s.textContent='デモ';return}
+  if(queue.length){s.className='sync wait';s.textContent=(navigator.onLine?'送信待ち ':'オフライン ')+queue.length+'件'}
+  else if(lastErr){s.className='sync err';s.textContent='送信エラー'}
+  else{s.className='sync';s.textContent='送信済み'}}
+async function flush(){
+  syncLabel();if(flushing||!queue.length||!navigator.onLine)return;flushing=true;
+  const batch=queue.slice(0,200);
+  try{await api(null,{action:'submit',id:cfg.id,records:batch});
+    const sent=new Set(batch.map(r=>r.key+'@'+r.ts));queue=queue.filter(r=>!sent.has(r.key+'@'+r.ts));lastErr='';saveLocal()}
+  catch(e){lastErr=e.message;if(/終了/.test(e.message))toast(e.message)}
+  flushing=false;syncLabel();if(queue.length&&!lastErr)setTimeout(flush,300);
+}
+async function pull(){
+  if(!navigator.onLine||!pkg)return;
+  try{const j=await api({action:'records',id:cfg.id,date:cur.date,time:cur.time});let ch=false;
+    for(const r of j.records){const l=recs[r.key];if(!l||(+r.ts||0)>(+l.ts||0)){recs[r.key]=r;ch=true}}
+    if(ch){saveLocal();render();if(selId)paintSheet((recOf(selId)||{}).status)}}
+  catch(e){}
+}
+setInterval(flush,8000);setInterval(pull,20000);
+addEventListener('online',()=>{flush();pull()});addEventListener('offline',syncLabel);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){flush();pull()}});
+let lastW=innerWidth;addEventListener('resize',()=>{if(F()&&Math.abs(innerWidth-lastW)>40){lastW=innerWidth;fit()}});
+
+boot();
+})();
+</script>
+</body>
+</html>
